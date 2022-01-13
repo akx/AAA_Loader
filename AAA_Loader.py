@@ -85,6 +85,16 @@ def discover_mods(mods_path: str) -> Iterable[Mod]:
         yield Mod(name=name, path=base_path, module_path=f"mods.{name}.{name}")
 
 
+def ensure_module_package_on_path(mod: Mod) -> None:
+    """
+    Ensure the parent directory of the mod's `path` (which is `mods/X`) is on sys.path.
+    """
+
+    pkg_path = os.path.normpath(os.path.dirname(mod.path))
+    if pkg_path not in sys.path:
+        sys.path.append(pkg_path)
+
+
 class ModLoader:
     # TODO: Would be good to have a late loading functionality that runs with a customized negotiated order
     def __init__(self) -> None:
@@ -110,9 +120,6 @@ class ModLoader:
                 print(f"{mods_path} is not a valid directory, skipping")
                 continue
 
-            # TODO: this should likely only happen at actual import time
-            sys.path.append(pkg_path)
-
             for mod in discover_mods(mods_path):
                 print(f"Found {mod.name} ({mod.path})")
                 self.all_mods.append(mod)
@@ -134,14 +141,15 @@ class ModLoader:
                 )
         # We could also just crash at this point.
 
-    def import_mod(self, mod: Mod) -> ModuleType:
+    def import_mod(self, mod: Mod) -> None:
         print(f"Loading {mod.name} ({mod.path})")
-        self.imported_mods[mod.name] = mod
         module = sys.modules.get(mod.module_path)
         if module:
-            print("Already loaded, not reloading")
-            return module
-        return import_module(mod.module_path)
+            print(f"Module with name {mod.module_path} already loaded: {module}")
+            return
+        ensure_module_package_on_path(mod)
+        import_module(mod.module_path)
+        self.imported_mods[mod.name] = mod
 
     def import_all_mods(self) -> None:
         for mod in self.all_mods:

@@ -4,9 +4,10 @@ import sys
 from collections import defaultdict, namedtuple
 from importlib import import_module
 from importlib.abc import Loader, MetaPathFinder
+from importlib.machinery import ModuleSpec
 from importlib.util import spec_from_loader
 from types import ModuleType
-from typing import Dict, List
+from typing import Dict, List, Optional, Iterable
 
 HELLO_MY_NAME_IS = "Loader"
 MODS_FLAG = "loadmods"
@@ -15,16 +16,16 @@ Mod = namedtuple("Mod", "name path module_path")
 
 
 # Readonly list type for stopping duplicate mod list entries in crashlogs
-class ReadOnlyList(list):
-    def append(*args, **kwargs):
+class ReadOnlyList(list):  # type: ignore[type-arg]
+    def append(*args, **kwargs):  # type: ignore[no-untyped-def]
         pass
 
 
 class AssetLoader:
-    def __init__(self, path):
+    def __init__(self, path: str) -> None:
         self.base_path = path
 
-    def get_asset(self, path):
+    def get_asset(self, path: List[str]) -> List[str]:
         assert path
         assert isinstance(path, list)
         assert isinstance(path[0], str)
@@ -33,6 +34,32 @@ class AssetLoader:
         relative_path = os.path.relpath(desired_path, os.path.abspath("rl_data"))
 
         return relative_path.split(os.sep)
+
+
+class ConstantImporter(MetaPathFinder, Loader):
+    def __init__(self, fullname: str, module: ModuleType):
+        self.fullname = fullname
+        self.module = module
+
+    def find_spec(cls, fullname: str, path=None, target=None) -> Optional[ModuleSpec]:  # type: ignore[no-untyped-def]
+        if fullname == cls.fullname:
+            return spec_from_loader(fullname, cls, origin=cls.fullname)
+        return None
+
+    def create_module(cls, spec: ModuleSpec) -> ModuleType:
+        return cls.module
+
+    def exec_module(cls, module=None):  # type: ignore[no-untyped-def]
+        pass
+
+    def get_code(cls, fullname):  # type: ignore[no-untyped-def]
+        return None
+
+    def get_source(cls, fullname):  # type: ignore[no-untyped-def]
+        return None
+
+    def is_package(cls, fullname):  # type: ignore[no-untyped-def]
+        return False
 
 
 # This is a fix for the inability to import RiftWizard directly without using a stack inspection.
@@ -44,39 +71,13 @@ RiftWizard = inspect.getmodule(frm[0])
 frm = stack[0]
 AAA_Loader = inspect.getmodule(frm[0])
 
-
-class ConstantImporter(MetaPathFinder, Loader):
-    def __init__(self, fullname, module):
-        self.fullname = fullname
-        self.module = module
-
-    def find_spec(cls, fullname, path=None, target=None):
-        if fullname == cls.fullname:
-            spec = spec_from_loader(fullname, cls, origin=cls.fullname)
-            return spec
-        return None
-
-    def create_module(cls, spec):
-        return cls.module
-
-    def exec_module(cls, module=None):
-        pass
-
-    def get_code(cls, fullname):
-        return None
-
-    def get_source(cls, fullname):
-        return None
-
-    def is_package(cls, fullname):
-        return False
+if RiftWizard:
+    sys.meta_path.insert(0, ConstantImporter("RiftWizard", RiftWizard))
+if AAA_Loader:
+    sys.meta_path.insert(0, ConstantImporter("mods.AAA_Loader.AAA_Loader", AAA_Loader))
 
 
-sys.meta_path.insert(0, ConstantImporter("RiftWizard", RiftWizard))
-sys.meta_path.insert(0, ConstantImporter("mods.AAA_Loader.AAA_Loader", AAA_Loader))
-
-
-def discover_mods(mods_path):
+def discover_mods(mods_path: str) -> Iterable[Mod]:
     for f in os.listdir(mods_path):
         if not os.path.isdir(os.path.join(mods_path, f)):
             continue
@@ -89,19 +90,19 @@ def discover_mods(mods_path):
 
 class ModLoader:
     # TODO: Would be good to have a late loading functionality that runs with a customized negotiated order
-    def __init__(self):
+    def __init__(self) -> None:
         # List of all discovered mods
         self.all_mods: List[Mod] = []
         # Lookup from module name -> path for loaded mods
         self.imported_mods: Dict[str, Mod] = {}
 
-    def is_mod_active(self, modname: str):
+    def is_mod_active(self, modname: str) -> bool:
         return modname in self.imported_mods
 
-    def get_asset_loader(self, modname):
+    def get_asset_loader(self, modname: str) -> AssetLoader:
         return AssetLoader(self.imported_mods[modname].path)
 
-    def discover_mods_in_path(self, path):
+    def discover_mods_in_path(self, path: str) -> None:
         print(f"Checking mod path: {path}")
         for package in os.listdir(path):
             print(f"Checking {package} for mods...")
@@ -118,13 +119,13 @@ class ModLoader:
                 print(f"Found {mod.name} ({mod.path})")
                 self.all_mods.append(mod)
 
-    def discover_base_mods(self):
+    def discover_base_mods(self) -> None:
         print("Checking base game mod folder for mods...")
         for mod in discover_mods("mods"):
             print(f"Found {mod.name} ({mod.path})")
             self.all_mods.append(mod)
 
-    def complain_about_duplicates(self):
+    def complain_about_duplicates(self) -> None:
         check_set = defaultdict(list)
         for mod in self.all_mods:
             check_set[mod.module_path].append(mod)
@@ -144,7 +145,7 @@ class ModLoader:
             return module
         return import_module(mod.module_path)
 
-    def import_all_mods(self):
+    def import_all_mods(self) -> None:
         for mod in self.all_mods:
             self.import_mod(mod)
 
@@ -158,8 +159,11 @@ def main() -> None:
         loader.discover_mods_in_path(mods_path)
     loader.complain_about_duplicates()
     loader.import_all_mods()
-    RiftWizard.loaded_mods = ReadOnlyList(list(loader.imported_mods))
     print(f"{HELLO_MY_NAME_IS} Loaded")
+    if RiftWizard:
+        RiftWizard.loaded_mods = ReadOnlyList(list(loader.imported_mods))  # type: ignore[attr-defined]
+    else:
+        print("Warning: could not set RiftWizard.loaded_mods")
 
 
 main()  # TODO: does this need to be guarded with the usual `if main` stanza?

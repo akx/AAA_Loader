@@ -1,7 +1,7 @@
 import inspect
 import os
 import sys
-from collections import UserList, defaultdict, namedtuple
+from collections import defaultdict, namedtuple
 from importlib import import_module
 from importlib.abc import Loader, MetaPathFinder
 from importlib.util import spec_from_loader
@@ -9,14 +9,20 @@ from importlib.util import spec_from_loader
 HELLO_MY_NAME_IS = "Loader"
 MODS_FLAG = "loadmods"
 
-print(f"Starting up {HELLO_MY_NAME_IS}")
-
 Mod = namedtuple("Mod", "name path module_path")
 
 # List of all currently active mods, including their name, path and module path
 all_mods = []
 # Lookup for modname -> path so I don't have to do a linear search through all mods when making an asset loader
 mod_path_lookup = {}
+
+imported_mods = []
+
+
+# Readonly list type for stopping duplicate mod list entries in crashlogs
+class ReadOnlyList(list):
+    def append(*args, **kwargs):
+        pass
 
 
 class AssetLoader:
@@ -126,46 +132,45 @@ def complain_about_duplicates():
     # We could also just crash at this point.
 
 
-def import_mod(mod):
+def import_mod(mod) -> ModuleType:
     print(f"Loading {mod.name} ({mod.path})")
     if not mod.name in imported_mods:
         imported_mods.append(mod.name)
-    if mod.module_path in sys.modules:
-        print("Already loaded, skipping")
-        return
-    module = import_module(mod.module_path)
+    module = sys.modules.get(mod.module_path)
+    if module:
+        print("Already loaded, not reloading")
+        return module
+    return import_module(mod.module_path)
 
 
-# Add all mods from the base game mod folder
-print("Checking base game mod folder for mods...")
-for mod in discover_mods("mods"):
-    print(f"Found {mod.name} ({mod.path})")
-    all_mods.append(mod)
+def main() -> None:
+    print(f"Starting up {HELLO_MY_NAME_IS}")
+    # Add all mods from the base game mod folder
+    print("Checking base game mod folder for mods...")
+    for mod in discover_mods("mods"):
+        print(f"Found {mod.name} ({mod.path})")
+        all_mods.append(mod)
 
-# If the startup flag is set, find mods from the specified path
-if MODS_FLAG in sys.argv:
-    mods_path = sys.argv[sys.argv.index(MODS_FLAG) + 1]
+    # If the startup flag is set, find mods from the specified path
+    if MODS_FLAG in sys.argv:
+        mods_path = sys.argv[sys.argv.index(MODS_FLAG) + 1]
 
-    print(f"Found mod sideloading path: {mods_path}")
+        print(f"Found mod sideloading path: {mods_path}")
 
-    load_mods(mods_path)
+        load_mods(mods_path)
 
-complain_about_duplicates()
+    complain_about_duplicates()
 
-for mod in all_mods:
-    if not mod.name in mod_path_lookup:
-        mod_path_lookup[mod.name] = mod.path
+    for mod in all_mods:
+        if not mod.name in mod_path_lookup:
+            mod_path_lookup[mod.name] = mod.path
 
-# Readonly list type for stopping duplicate mod list entries in crashlogs
-class ReadOnlyList(UserList):
-    def append(*args, **kwargs):
-        pass
+    for mod in all_mods:
+        import_mod(mod)
 
-imported_mods = []
+    RiftWizard.loaded_mods = ReadOnlyList(imported_mods)
 
-for mod in all_mods:
-    import_mod(mod)
+    print(f"{HELLO_MY_NAME_IS} Loaded")
 
-RiftWizard.loaded_mods = ReadOnlyList(imported_mods)
 
-print(f"{HELLO_MY_NAME_IS} Loaded")
+main()  # TODO: does this need to be guarded with the usual `if main` stanza?

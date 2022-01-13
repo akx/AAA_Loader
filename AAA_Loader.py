@@ -7,7 +7,7 @@ from collections import namedtuple, defaultdict, UserList
 HELLO_MY_NAME_IS = "Loader"
 MODS_FLAG = "loadmods"
 
-print("Starting up %s" % HELLO_MY_NAME_IS)
+print(f"Starting up {HELLO_MY_NAME_IS}")
 
 Mod = namedtuple("Mod", "name path module_path")
 
@@ -90,18 +90,18 @@ def discover_mods(mods_path):
 
 def load_mods(path):
 	for package in os.listdir(path):
-		print("Checking %s for mods..." % package)
+		print(f"Checking {package} for mods...")
 		
 		mods_path = os.path.join(path, package, 'mods')
 		
 		if not os.path.isdir(mods_path):
-			print("%s is not a valid directory, skipping" % mods_path)
+			print(f"{mods_path} is not a valid directory, skipping")
 			continue
 			
 		sys.path.append(os.path.join(path, package))
 			
 		for mod in discover_mods(mods_path):
-			print("Found %s (%s)" % (mod.name, mod.path))
+			print(f"Found {mod.name} ({mod.path})")
 			all_mods.append(mod)
 
 def complain_about_duplicates():
@@ -110,11 +110,11 @@ def complain_about_duplicates():
 		check_set[mod.module_path].append(mod)
 	for key, group in check_set.items():
 		if len(group) > 1:
-			print("WARNING: Found duplicate module path %s (%d duplicates). Only one will be loaded." % (key, len(group)))
+			print(f"WARNING: Found duplicate module path {key} ({len(group)} duplicates). Only one will be loaded.")
 	#We could also just crash at this point.
 			
 def import_mod(mod):
-	print("Loading %s (%s)" % (mod.name, mod.path))
+	print(f"Loading {mod.name} ({mod.path})")
 	if not mod.name in imported_mods:
 		imported_mods.append(mod.name)
 	if mod.module_path in sys.modules:
@@ -125,14 +125,14 @@ def import_mod(mod):
 #Add all mods from the base game mod folder
 print("Checking base game mod folder for mods...")
 for mod in discover_mods("mods"):
-	print("Found %s (%s)" % (mod.name, mod.path))
+	print(f"Found {mod.name} ({mod.path})")
 	all_mods.append(mod)
 
 #If the startup flag is set, find mods from the specified path
 if MODS_FLAG in sys.argv:
 	mods_path = sys.argv[sys.argv.index(MODS_FLAG) + 1]
 	
-	print("Found mod sideloading path: %s" % mods_path)
+	print(f"Found mod sideloading path: {mods_path}")
 	
 	load_mods(mods_path)
 	
@@ -156,4 +156,4 @@ for mod in all_mods:
 	
 RiftWizard.loaded_mods = ReadOnlyList(imported_mods)
 		
-print("%s Loaded" % HELLO_MY_NAME_IS)
+print(f"{HELLO_MY_NAME_IS} Loaded")

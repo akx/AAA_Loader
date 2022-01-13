@@ -1,8 +1,10 @@
-import sys
+import inspect
 import os
+import sys
+from collections import UserList, defaultdict, namedtuple
+from importlib import import_module
 from importlib.abc import Loader, MetaPathFinder
 from importlib.util import spec_from_loader
-from collections import namedtuple, defaultdict, UserList
 
 HELLO_MY_NAME_IS = "Loader"
 MODS_FLAG = "loadmods"
@@ -44,7 +46,6 @@ def get_asset_loader(modname):
 
 
 # This is a fix for the inability to import RiftWizard directly without using a stack inspection.
-import inspect
 
 stack = inspect.stack()
 
@@ -159,9 +160,6 @@ for mod in all_mods:
 class ReadOnlyList(UserList):
     def append(*args, **kwargs):
         pass
-
-
-from importlib import import_module
 
 imported_mods = []
 

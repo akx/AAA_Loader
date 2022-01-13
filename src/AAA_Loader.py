@@ -98,10 +98,12 @@ def discover_mods(mods_path: str) -> Iterable[Mod]:
 
 def ensure_module_package_on_path(mod: Mod) -> None:
     """
-    Ensure the parent directory of the mod's `path` (which is `mods/X`) is on sys.path.
+    Ensure the grandparent directory of the mod's `path` (which is `mods/X`) is on sys.path.
+
+    IOW, if the mod's path is xyz/mods/foo/foo.py, ensures xyz is on the path.
     """
 
-    pkg_path = os.path.normpath(os.path.dirname(mod.path))
+    pkg_path = os.path.normpath(os.path.dirname(os.path.dirname(mod.path)))
     if pkg_path not in sys.path:
         log.info(f"Adding {pkg_path} to sys.path")
         sys.path.append(pkg_path)

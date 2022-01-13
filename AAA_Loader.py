@@ -5,18 +5,13 @@ from collections import defaultdict, namedtuple
 from importlib import import_module
 from importlib.abc import Loader, MetaPathFinder
 from importlib.util import spec_from_loader
+from types import ModuleType
+from typing import Dict, List
 
 HELLO_MY_NAME_IS = "Loader"
 MODS_FLAG = "loadmods"
 
 Mod = namedtuple("Mod", "name path module_path")
-
-# List of all currently active mods, including their name, path and module path
-all_mods = []
-# Lookup for modname -> path so I don't have to do a linear search through all mods when making an asset loader
-mod_path_lookup = {}
-
-imported_mods = []
 
 
 # Readonly list type for stopping duplicate mod list entries in crashlogs
@@ -38,17 +33,6 @@ class AssetLoader:
         relative_path = os.path.relpath(desired_path, os.path.abspath("rl_data"))
 
         return relative_path.split(os.sep)
-
-
-# TODO: Would be good to have a late loading functionality that runs with a customized negotiated order
-
-
-def is_mod_active(modname):
-    return modname in mod_path_lookup
-
-
-def get_asset_loader(modname):
-    return AssetLoader(mod_path_lookup[modname])
 
 
 # This is a fix for the inability to import RiftWizard directly without using a stack inspection.
@@ -103,73 +87,78 @@ def discover_mods(mods_path):
         yield Mod(f, os.path.join(mods_path, f), ".".join(["mods", f, f]))
 
 
-def load_mods(path):
-    for package in os.listdir(path):
-        print(f"Checking {package} for mods...")
+class ModLoader:
+    # TODO: Would be good to have a late loading functionality that runs with a customized negotiated order
+    def __init__(self):
+        # List of all discovered mods
+        self.all_mods: List[Mod] = []
+        # Lookup from module name -> path for loaded mods
+        self.imported_mods: Dict[str, Mod] = {}
 
-        mods_path = os.path.join(path, package, "mods")
+    def is_mod_active(self, modname: str):
+        return modname in self.imported_mods
 
-        if not os.path.isdir(mods_path):
-            print(f"{mods_path} is not a valid directory, skipping")
-            continue
+    def get_asset_loader(self, modname):
+        return AssetLoader(self.imported_mods[modname].path)
 
-        sys.path.append(os.path.join(path, package))
+    def discover_mods_in_path(self, path):
+        print(f"Checking mod path: {path}")
+        for package in os.listdir(path):
+            print(f"Checking {package} for mods...")
 
-        for mod in discover_mods(mods_path):
+            mods_path = os.path.join(path, package, "mods")
+
+            if not os.path.isdir(mods_path):
+                print(f"{mods_path} is not a valid directory, skipping")
+                continue
+
+            sys.path.append(os.path.join(path, package))  # TODO: maybe deduplicate?
+
+            for mod in discover_mods(mods_path):
+                print(f"Found {mod.name} ({mod.path})")
+                self.all_mods.append(mod)
+
+    def discover_base_mods(self):
+        print("Checking base game mod folder for mods...")
+        for mod in discover_mods("mods"):
             print(f"Found {mod.name} ({mod.path})")
-            all_mods.append(mod)
+            self.all_mods.append(mod)
 
+    def complain_about_duplicates(self):
+        check_set = defaultdict(list)
+        for mod in self.all_mods:
+            check_set[mod.module_path].append(mod)
+        for key, group in check_set.items():
+            if len(group) > 1:
+                print(
+                    f"WARNING: Found duplicate module path {key} ({len(group)} duplicates). Only one will be loaded."
+                )
+        # We could also just crash at this point.
 
-def complain_about_duplicates():
-    check_set = defaultdict(list)
-    for mod in all_mods:
-        check_set[mod.module_path].append(mod)
-    for key, group in check_set.items():
-        if len(group) > 1:
-            print(
-                f"WARNING: Found duplicate module path {key} ({len(group)} duplicates). Only one will be loaded."
-            )
-    # We could also just crash at this point.
+    def import_mod(self, mod: Mod) -> ModuleType:
+        print(f"Loading {mod.name} ({mod.path})")
+        self.imported_mods[mod.name] = mod
+        module = sys.modules.get(mod.module_path)
+        if module:
+            print("Already loaded, not reloading")
+            return module
+        return import_module(mod.module_path)
 
-
-def import_mod(mod) -> ModuleType:
-    print(f"Loading {mod.name} ({mod.path})")
-    if not mod.name in imported_mods:
-        imported_mods.append(mod.name)
-    module = sys.modules.get(mod.module_path)
-    if module:
-        print("Already loaded, not reloading")
-        return module
-    return import_module(mod.module_path)
+    def import_all_mods(self):
+        for mod in self.all_mods:
+            self.import_mod(mod)
 
 
 def main() -> None:
     print(f"Starting up {HELLO_MY_NAME_IS}")
-    # Add all mods from the base game mod folder
-    print("Checking base game mod folder for mods...")
-    for mod in discover_mods("mods"):
-        print(f"Found {mod.name} ({mod.path})")
-        all_mods.append(mod)
-
-    # If the startup flag is set, find mods from the specified path
+    loader = ModLoader()
+    loader.discover_base_mods()
     if MODS_FLAG in sys.argv:
         mods_path = sys.argv[sys.argv.index(MODS_FLAG) + 1]
-
-        print(f"Found mod sideloading path: {mods_path}")
-
-        load_mods(mods_path)
-
-    complain_about_duplicates()
-
-    for mod in all_mods:
-        if not mod.name in mod_path_lookup:
-            mod_path_lookup[mod.name] = mod.path
-
-    for mod in all_mods:
-        import_mod(mod)
-
-    RiftWizard.loaded_mods = ReadOnlyList(imported_mods)
-
+        loader.discover_mods_in_path(mods_path)
+    loader.complain_about_duplicates()
+    loader.import_all_mods()
+    RiftWizard.loaded_mods = ReadOnlyList(list(loader.imported_mods))
     print(f"{HELLO_MY_NAME_IS} Loaded")
 
 

@@ -66,18 +66,22 @@ class ConstantImporter(MetaPathFinder, Loader):
         return False
 
 
-# This is a fix for the inability to import RiftWizard directly without using a stack inspection.
+RiftWizard: Optional[ModuleType] = None
 
-stack = inspect.stack()
 
-frm = stack[-1]
-RiftWizard = inspect.getmodule(frm[0])
-frm = stack[0]
-AAA_Loader = inspect.getmodule(frm[0])
+def patch_imports(stack: List["inspect.FrameInfo"]) -> None:
+    global RiftWizard
+    # Try to find RiftWizard module á la
+    # https://github.com/RiftWizard-Modders/RiftWizard-Modding/wiki/Mod-Setup#importing-riftwizardpy
+    frm = stack[-1]
+    RiftWizard = inspect.getmodule(frm[0])
+    # Insert a meta loader to allow it to be imported wherever
+    if RiftWizard:
+        sys.meta_path.insert(0, ConstantImporter("RiftWizard", RiftWizard))
 
-if RiftWizard:
-    sys.meta_path.insert(0, ConstantImporter("RiftWizard", RiftWizard))
-if AAA_Loader:
+    AAA_Loader = inspect.getmodule(patch_imports)  # Get our own module and do the same
+    assert AAA_Loader
+    # TODO: does this work correctly if there is no (namespace) package called `mods`?
     sys.meta_path.insert(0, ConstantImporter("mods.AAA_Loader.AAA_Loader", AAA_Loader))
 
 
@@ -176,4 +180,6 @@ def main(argv: List[str] = sys.argv) -> ModLoader:
     return loader
 
 
-main()  # TODO: does this need to be guarded with the usual `if main` stanza?
+if not os.environ.get("AAA_LOADER_MANUAL"):
+    patch_imports(inspect.stack())
+    main()

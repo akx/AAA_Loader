@@ -78,14 +78,11 @@ if AAA_Loader:
 
 
 def discover_mods(mods_path: str) -> Iterable[Mod]:
-    for f in os.listdir(mods_path):
-        if not os.path.isdir(os.path.join(mods_path, f)):
+    for name in os.listdir(mods_path):
+        base_path = os.path.join(mods_path, name)
+        if not os.path.isfile(os.path.join(base_path, f"{name}.py")):
             continue
-
-        if not os.path.exists(os.path.join(mods_path, f, f + ".py")):
-            continue
-
-        yield Mod(f, os.path.join(mods_path, f), ".".join(["mods", f, f]))
+        yield Mod(name=name, path=base_path, module_path=f"mods.{name}.{name}")
 
 
 class ModLoader:
@@ -105,15 +102,16 @@ class ModLoader:
     def discover_mods_in_path(self, path: str) -> None:
         print(f"Checking mod path: {path}")
         for package in os.listdir(path):
-            print(f"Checking {package} for mods...")
-
-            mods_path = os.path.join(path, package, "mods")
+            pkg_path = os.path.join(path, package)
+            print(f"Checking {pkg_path} for mods...")
+            mods_path = os.path.join(pkg_path, "mods")
 
             if not os.path.isdir(mods_path):
                 print(f"{mods_path} is not a valid directory, skipping")
                 continue
 
-            sys.path.append(os.path.join(path, package))  # TODO: maybe deduplicate?
+            # TODO: this should likely only happen at actual import time
+            sys.path.append(pkg_path)
 
             for mod in discover_mods(mods_path):
                 print(f"Found {mod.name} ({mod.path})")

@@ -7,6 +7,15 @@ name: CI
     branches:
       - master
 jobs:
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+      - uses: actions/checkout@v2
+      - run: 'pip install pytest~=6.2.0 pytest-cov'
+      - run: py.test -vvv --cov src/
   Lint:
     runs-on: ubuntu-latest
     steps:

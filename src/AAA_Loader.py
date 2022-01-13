@@ -9,6 +9,7 @@ from importlib.util import spec_from_loader
 from types import ModuleType
 from typing import Dict, List, Optional, Iterable
 
+__version__ = "0.1"
 HELLO_MY_NAME_IS = "Loader"
 MODS_FLAG = "loadmods"
 
